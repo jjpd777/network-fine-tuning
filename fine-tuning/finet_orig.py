@@ -27,6 +27,8 @@ ap.add_argument("-d", "--dataset", required=True,
 	help="path to input dataset")
 ap.add_argument("-m", "--model", required=True,
 	help="path to output model")
+ap.add_argument("-n", "--num-models", type=int, default=5,
+	help="# of models to train")
 args = vars(ap.parse_args())
 
 # construct the image generator for data augmentation
@@ -105,26 +107,43 @@ print(classification_report(testY.argmax(axis=1),
 for layer in baseModel.layers[15:]:
 	layer.trainable = True
 
+for i in np.arange(0, args["num_models"]):
+	# initialize the optimizer and model
+	print("[INFO] training model {}/{}".format(i + 1,
+		args["num_models"]))
 # for the changes to the model to take affect we need to recompile
 # the model, this time using SGD with a *very* small learning rate
-print("[INFO] re-compiling model...")
-opt = SGD(lr=0.001)
-model.compile(loss="categorical_crossentropy", optimizer=opt,
-	metrics=["accuracy"])
+	print("[INFO] re-compiling model...")
+	opt = SGD(lr=0.001)
+	if i ==2:
+		opt = RMSprop(lr=0.001, rho=0.9, epsilon=None, decay=0.0)
+	if i ==4:
+		opt = RMSprop(lr=0.0012, rho=0.9, epsilon=None, decay=0.01)
 
-# train the model again, this time fine-tuning *both* the final set
-# of CONV layers along with our set of FC layers
-print("[INFO] fine-tuning model...")
-model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
-	validation_data=(testX, testY), epochs=100,
-	steps_per_epoch=len(trainX) // 32, verbose=1)
+	model.compile(loss="categorical_crossentropy", optimizer=opt,
+		metrics=["accuracy"])
 
-# evaluate the network on the fine-tuned model
-print("[INFO] evaluating after fine-tuning...")
-predictions = model.predict(testX, batch_size=32)
-print(classification_report(testY.argmax(axis=1),
-	predictions.argmax(axis=1), target_names=classNames))
+	# train the model again, this time fine-tuning *both* the final set
+	# of CONV layers along with our set of FC layers
+	print("[INFO] fine-tuning model...")
+	model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
+		validation_data=(testX, testY), epochs=100,
+		steps_per_epoch=len(trainX) // 32, verbose=1)
 
-# save the model to disk
-print("[INFO] serializing model...")
-model.save(args["model"])
+	# save the model to disk
+	print("[INFO] serializing model...")
+	model.save(args["model"])
+	# save the model to disk
+	p = [args["models"], "model_{}.model".format(i)]
+	model.save(os.path.sep.join(p))
+
+	# evaluate the network
+	predictions = model.predict(testX, batch_size=64)
+	report = classification_report(testY.argmax(axis=1),
+		predictions.argmax(axis=1), target_names=labelNames)
+
+	# save the classification report to file
+	p = [args["output"], "model_{}.txt".format(i)]
+	f = open(os.path.sep.join(p), "w")
+	f.write(report)
+	f.close()
