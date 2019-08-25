@@ -63,73 +63,77 @@ def prepare_data(data,labels):
 	testY = LabelBinarizer().fit_transform(testY)
 	return (trainX, testX, trainY, testY)
 
-def build_model(optimizer, dimensions, num_channels, class_names)
 
-# load the VGG16 network, ensuring the head FC layer sets are left
-# off
-baseModel = VGG16(weights="imagenet", include_top=False,
-	input_tensor=Input(shape=(dimensions,dimensions,num_channels)))
+def build_model(optimizer, dimensions, class_names):
+	# load the VGG16 network, ensuring the head FC layer sets are left
+	# off
+	baseModel = VGG16(weights="imagenet", include_top=False,
+		input_tensor=Input(shape=(dimensions,dimensions,3)))
 
-# initialize the new head of the network, a set of FC layers
-# followed by a softmax classifier
-headModel = FCHeadNet.build(baseModel, len(class_names), 256)
+	# initialize the new head of the network, a set of FC layers
+	# followed by a softmax classifier
+	headModel = FCHeadNet.build(baseModel, len(class_names), 256)
 
-# place the head FC model on top of the base model -- this will
-# become the actual model we will train
-model = Model(inputs=baseModel.input, outputs=headModel)
+	# place the head FC model on top of the base model -- this will
+	# become the actual model we will train
+	model = Model(inputs=baseModel.input, outputs=headModel)
 
-# loop over all layers in the base model and freeze them so they
-# will *not* be updated during the training process
-for layer in baseModel.layers:
-	layer.trainable = False
+	# loop over all layers in the base model and freeze them so they
+	# will *not* be updated during the training process
+	for layer in baseModel.layers:
+		layer.trainable = False
 
-# compile our model (this needs to be done after our setting our
-# layers to being non-trainable
-print("[INFO] compiling model...")
-opt = RMSprop(lr=0.001)
-model.compile(loss="categorical_crossentropy", optimizer=opt,
-	metrics=["accuracy"])
+	# compile our model (this needs to be done after our setting our
+	# layers to being non-trainable
+	print("[INFO] compiling model...")
+	opt = RMSprop(lr=0.001)
+	model.compile(loss="categorical_crossentropy", optimizer=opt,
+		metrics=["accuracy"])
 
-# train the head of the network for a few epochs (all other
-# layers are frozen) -- this will allow the new FC layers to
-# start to become initialized with actual "learned" values
-# versus pure random
-print("[INFO] training head...")
-model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
-	validation_data=(testX, testY), epochs=25,
-	steps_per_epoch=len(trainX) // 32, verbose=1)
+	# train the head of the network for a few epochs (all other
+	# layers are frozen) -- this will allow the new FC layers to
+	# start to become initialized with actual "learned" values
+	# versus pure random
+	print("[INFO] training head...")
+	model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
+		validation_data=(testX, testY), epochs=25,
+		steps_per_epoch=len(trainX) // 32, verbose=1)
 
-# evaluate the network after initialization
-print("[INFO] evaluating after initialization...")
-predictions = model.predict(testX, batch_size=32)
-print(classification_report(testY.argmax(axis=1),
-	predictions.argmax(axis=1), target_names=classNames))
+	# evaluate the network after initialization
+	print("[INFO] evaluating after initialization...")
+	predictions = model.predict(testX, batch_size=32)
+	print(classification_report(testY.argmax(axis=1),
+		predictions.argmax(axis=1), target_names=class_names))
 
-# now that the head FC layers have been trained/initialized, lets
-# unfreeze the final set of CONV layers and make them trainable
-for layer in baseModel.layers[15:]:
-	layer.trainable = True
+	# now that the head FC layers have been trained/initialized, lets
+	# unfreeze the final set of CONV layers and make them trainable
+	for layer in baseModel.layers[15:]:
+		layer.trainable = True
 
-# for the changes to the model to take affect we need to recompile
-# the model, this time using SGD with a *very* small learning rate
-print("[INFO] re-compiling model...")
-opt = SGD(lr=0.001)
-model.compile(loss="categorical_crossentropy", optimizer=opt,
-	metrics=["accuracy"])
+	# for the changes to the model to take affect we need to recompile
+	# the model, this time using SGD with a *very* small learning rate
+	print("[INFO] re-compiling model...")
+	opt = SGD(lr=0.001)
+	model.compile(loss="categorical_crossentropy", optimizer=opt,
+		metrics=["accuracy"])
 
-# train the model again, this time fine-tuning *both* the final set
-# of CONV layers along with our set of FC layers
-print("[INFO] fine-tuning model...")
-model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
-	validation_data=(testX, testY), epochs=100,
-	steps_per_epoch=len(trainX) // 32, verbose=1)
+	# train the model again, this time fine-tuning *both* the final set
+	# of CONV layers along with our set of FC layers
+	print("[INFO] fine-tuning model...")
+	model.fit_generator(aug.flow(trainX, trainY, batch_size=32),
+		validation_data=(testX, testY), epochs=100,
+		steps_per_epoch=len(trainX) // 32, verbose=1)
 
-# evaluate the network on the fine-tuned model
-print("[INFO] evaluating after fine-tuning...")
-predictions = model.predict(testX, batch_size=32)
-print(classification_report(testY.argmax(axis=1),
-	predictions.argmax(axis=1), target_names=classNames))
+	# evaluate the network on the fine-tuned model
+	print("[INFO] evaluating after fine-tuning...")
+	predictions = model.predict(testX, batch_size=32)
+	print(classification_report(testY.argmax(axis=1),
+		predictions.argmax(axis=1), target_names=class_names))
 
-# save the model to disk
-print("[INFO] serializing model...")
-model.save(args["model"])
+	# save the model to disk
+	print("[INFO] serializing model...")
+	model.save(args["model"])
+
+data,labels = pre_process_data(224,imagePaths)
+(trainX, testX, trainY, testY) = prepare_data(data,labels)
+build_model('a',224,classNames)
